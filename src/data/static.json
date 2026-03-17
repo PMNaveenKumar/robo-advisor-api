@@ -1,0 +1,16 @@
+{
+  "users": [
+    {
+      "id": "user-001",
+      "username": "admin",
+      "passwordHash": "$2b$10$WWnK81.ovk5L428zMTWPquRWySzw2aDVhGZXRkcjzUKwWwORvqBve",
+      "role": "admin"
+    },
+    {
+      "id": "user-002",
+      "username": "partner",
+      "passwordHash": "$2b$10$WWnK81.ovk5L428zMTWPquRWySzw2aDVhGZXRkcjzUKwWwORvqBve",
+      "role": "partner"
+    }
+  ]
+}
