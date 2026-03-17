@@ -88,8 +88,11 @@ Swagger UI: `http://localhost:3000/api/docs`
 ## HTTPS Setup (production)
 
 ```bash
-# Generate self-signed certs (requires openssl)
+# Generate self-signed certs (requires openssl) | run it in git bash
 bash certs/generate-certs.sh
+
+# Update .env file
+NODE_ENV=production
 
 # Set NODE_ENV=production in .env, then:
 npm run build
