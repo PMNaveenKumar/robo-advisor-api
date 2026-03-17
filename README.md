@@ -85,14 +85,17 @@ Swagger UI: `http://localhost:3000/api/docs`
 
 ---
 
-## HTTPS Setup (development)
+## HTTPS Setup (production)
 
 ```bash
 # Generate self-signed certs (requires openssl)
 bash certs/generate-certs.sh
 
 # Set NODE_ENV=production in .env, then:
-npm run dev
+npm run build
+
+# Start the server
+npm start
 ```
 
 HTTPS server: `https://localhost:3443`
