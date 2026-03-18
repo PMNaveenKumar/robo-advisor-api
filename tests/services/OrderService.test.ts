@@ -4,20 +4,26 @@ import { OrderService } from "../../src/services/OrderService";
 import { OrderRepository } from "../../src/data/OrderRepository";
 import { SplitOrderRequestSchema } from "../../src/schemas";
 import { AppError } from "../../src/errors/AppError";
-import { Order } from "../../src/types";
+import { Order, OrderType, ModelPortfolio } from "../../src/types";
 
-function makeValidRequest(overrides: Partial<SplitOrderRequestSchema> = {}): SplitOrderRequestSchema {
+interface RequestOverrides {
+  portfolio?: ModelPortfolio;
+  totalAmount?: number;
+  orderType?: OrderType;
+}
+
+function makeValidRequest(overrides: RequestOverrides = {}): SplitOrderRequestSchema {
   const req = new SplitOrderRequestSchema();
-  req.portfolio = {
+  req.portfolio = overrides.portfolio ?? {
     name: "Tech Growth",
     stocks: [
       { ticker: "AAPL", percentage: 60 },
       { ticker: "TSLA", percentage: 40 },
     ],
   };
-  req.totalAmount = 100;
-  req.orderType = "BUY";
-  return Object.assign(req, overrides);
+  req.totalAmount = overrides.totalAmount ?? 100;
+  req.orderType = overrides.orderType ?? "BUY";
+  return req;
 }
 
 describe("OrderService", () => {
@@ -45,7 +51,7 @@ describe("OrderService", () => {
 
     it("should NOT have responseTimeMs on the order", () => {
       const result = orderService.splitOrder(makeValidRequest());
-      expect((result.data as Record<string, unknown>)["responseTimeMs"]).toBeUndefined();
+      expect((result.data as unknown as Record<string, unknown>)["responseTimeMs"]).toBeUndefined();
     });
 
     it("should build legs with ticker, percentage, shares, price, amount", () => {
@@ -84,7 +90,8 @@ describe("OrderService", () => {
 
       expect(aapl.shares).toBe(3.166);
       expect(aapl.amount).toBe(599.957);     // truncate(3.166 × 189.5, 3dp) = 599.957
-      expect(aapl.amount).not.toBe(600);     // NOT the raw percentage allocation    });
+      expect(aapl.amount).not.toBe(600);     // NOT the raw percentage allocation
+    });
 
     it("should use marketPrice override when provided", () => {
       const req = makeValidRequest({

@@ -248,9 +248,6 @@ describe("helper.ts", () => {
     });
 
     it("amount = shares × price (not raw allocation) when price causes rounding", () => {
-      // $1000, 60% → allocated=$600, price=$189.5
-      // shares = 600/189.5 = 3.166 (3dp)
-      // amount = 3.166 × 189.5 = 599.96 (NOT 600)
       const stocks: StockHolding[] = [
         { ticker: "AAPL", percentage: 60, marketPrice: 189.5 },
         { ticker: "TSLA", percentage: 40, marketPrice: 189.5 },
@@ -259,7 +256,7 @@ describe("helper.ts", () => {
       const aapl = legs[0];
 
       expect(aapl.shares).toBe(3.166);
-      expect(aapl.amount).toBe(599.96);       // shares × price
+      expect(aapl.amount).toBe(599.957);       // shares × price
       expect(aapl.amount).not.toBe(600);      // NOT the raw 60% allocation
     });
 
