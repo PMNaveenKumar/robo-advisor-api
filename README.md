@@ -126,19 +126,67 @@ HTTP server: `http://localhost:3000` (redirects to HTTPS)
 
 ---
 
+## OrderLeg Response Fields
+
+Each leg in the split order response contains:
+
+| Field | Type | Description |
+|---|---|---|
+| `ticker` | string | Stock ticker symbol (uppercased) |
+| `percentage` | number | Portfolio weight for this stock |
+| `shares` | number | Number of shares — truncated (not rounded) to `SHARE_DECIMAL_PLACES` |
+| `price` | number | Price used: `marketPrice` if provided, else from `stocks.json` |
+| `amount` | number | Actual cost = `shares × price`, truncated to `AMOUNT_DECIMAL_PLACES` |
+
+> **Note:** `amount` is computed as `shares × price` after share truncation, not as the raw percentage allocation. This ensures the response reflects the true cost and avoids reconciliation mismatches from rounding.
+>
+> Example: `$600` allocated, price `$189.5` → `3.166` shares → actual amount `$599.957` (not `$600`).
+
+---
+
+## Share & Amount Calculation
+
+The calculation follows this exact order to ensure amounts never exceed the allocation:
+
+```
+1. allocated = totalAmount × (percentage / 100)
+               e.g. 1000 × 60% = 600
+
+2. shares    = truncate(allocated ÷ price, SHARE_DECIMAL_PLACES)
+               e.g. truncate(600 ÷ 189.5, 3) = truncate(3.16623..., 3) = 3.166
+
+3. amount    = truncate(shares × price, AMOUNT_DECIMAL_PLACES)
+               e.g. truncate(3.166 × 189.5, 3) = truncate(599.957, 3) = 599.957
+```
+
+Both `SHARE_DECIMAL_PLACES` and `AMOUNT_DECIMAL_PLACES` are configurable in `.env` with no code change required.
+
+---
+
 ## Logs
 
 Daily rotating log files written to `logs/` at project root:
 
 ```
 logs/
-├── access-YYYY-MM-DD.log   ← all INFO and WARN entries (HTTP requests)
+├── access-YYYY-MM-DD.log   ← INFO and WARN entries (all HTTP requests)
 └── error-YYYY-MM-DD.log    ← ERROR entries only
 ```
 
 Each line is a structured JSON entry:
 ```json
-{"timestamp":"2024-03-17T10:00:01.123Z","level":"INFO","message":"POST /api/auth/login → 200 | 45ms","meta":{"method":"POST","url":"/api/auth/login","status":200,"durationMs":45,"requestId":"a1b2c3d4-..."}}
+{
+  "timestamp": "2024-03-17T10:00:01.123Z",
+  "level": "INFO",
+  "message": "POST /api/auth/login → 200 | 45ms",
+  "meta": {
+    "method": "POST",
+    "url": "/api/auth/login",
+    "status": 200,
+    "durationMs": 45,
+    "requestId": "a1b2c3d4-e5f6-..."
+  }
+}
 ```
 
 ---

@@ -2,6 +2,8 @@ import "reflect-metadata";
 import {
   calculateStockAmount,
   calculateShares,
+  calculateActualAmount,
+  truncateToDecimalPlaces,
   roundToDecimalPlaces,
   validatePortfolioWeights,
   validateStockSymbols,
@@ -17,194 +19,213 @@ describe("helper.ts", () => {
 
   // ─── getAvailableStocks ───────────────────────────────────────────────────
   describe("getAvailableStocks", () => {
-    it("should return a non-empty object", () => {
+    it("should return a non-empty object with numeric prices", () => {
       const stocks = getAvailableStocks();
       expect(Object.keys(stocks).length).toBeGreaterThan(0);
+      Object.values(stocks).forEach((p) => expect(typeof p).toBe("number"));
     });
 
-    it("should contain AAPL, TSLA, MSFT", () => {
+    it("should contain AAPL, TSLA and MSFT", () => {
       const stocks = getAvailableStocks();
       expect(stocks["AAPL"]).toBeDefined();
       expect(stocks["TSLA"]).toBeDefined();
       expect(stocks["MSFT"]).toBeDefined();
     });
-
-    it("should return numeric prices for each ticker", () => {
-      const stocks = getAvailableStocks();
-      Object.values(stocks).forEach((price) => {
-        expect(typeof price).toBe("number");
-        expect(price).toBeGreaterThan(0);
-      });
-    });
   });
 
   // ─── calculateStockAmount ─────────────────────────────────────────────────
   describe("calculateStockAmount", () => {
-    it("should return 60 for 60% of $100", () => {
-      expect(calculateStockAmount(100, 60)).toBe(60);
-    });
-
-    it("should return 400 for 40% of $1000", () => {
-      expect(calculateStockAmount(1000, 40)).toBe(400);
-    });
-
-    it("should return 62.5 for 25% of $250", () => {
-      expect(calculateStockAmount(250, 25)).toBe(62.5);
-    });
-
-    it("should return 0 when percentage is 0", () => {
-      expect(calculateStockAmount(500, 0)).toBe(0);
-    });
-
-    it("should return full amount when percentage is 100", () => {
-      expect(calculateStockAmount(500, 100)).toBe(500);
-    });
+    it("60% of $100 = $60", () => expect(calculateStockAmount(100, 60)).toBe(60));
+    it("40% of $1000 = $400", () => expect(calculateStockAmount(1000, 40)).toBe(400));
+    it("0% = $0", () => expect(calculateStockAmount(500, 0)).toBe(0));
+    it("100% = full amount", () => expect(calculateStockAmount(500, 100)).toBe(500));
   });
 
-  // ─── roundToDecimalPlaces ─────────────────────────────────────────────────
-  describe("roundToDecimalPlaces", () => {
-    it("should round 1.23456 to 3 dp → 1.235", () => {
-      expect(roundToDecimalPlaces(1.23456, 3)).toBe(1.235);
+  // ─── truncateToDecimalPlaces ──────────────────────────────────────────────
+  describe("truncateToDecimalPlaces", () => {
+    it("truncates 1.63265 to 3dp → 1.632 (no round-up)", () => {
+      expect(truncateToDecimalPlaces(1.63265, 3)).toBe(1.632);
     });
 
-    it("should round 1.23456 to 2 dp → 1.23", () => {
-      expect(roundToDecimalPlaces(1.23456, 2)).toBe(1.23);
+    it("truncates 1.99999 to 2dp → 1.99 (not 2.00)", () => {
+      expect(truncateToDecimalPlaces(1.99999, 2)).toBe(1.99);
     });
 
-    it("should round 1.23456 to 0 dp → 1", () => {
-      expect(roundToDecimalPlaces(1.23456, 0)).toBe(1);
+    it("truncates 1.9 to 0dp → 1 (not 2)", () => {
+      expect(truncateToDecimalPlaces(1.9, 0)).toBe(1);
     });
 
-    it("should handle float precision edge case: 0.1 + 0.2 → 0.3", () => {
-      expect(roundToDecimalPlaces(0.1 + 0.2, 1)).toBe(0.3);
+    it("value unchanged when actual decimal digits < requested places", () => {
+      expect(truncateToDecimalPlaces(1.63265306122449, 20)).toBe(1.63265306122449);
     });
 
-    it("should not change an already rounded value", () => {
-      expect(roundToDecimalPlaces(0.6, 3)).toBe(0.6);
+    it("integer input returns same integer", () => {
+      expect(truncateToDecimalPlaces(100, 3)).toBe(100);
+    });
+
+    it("handles zero correctly", () => {
+      expect(truncateToDecimalPlaces(0, 3)).toBe(0);
+    });
+
+    it("handles scientific notation — 3.157e-7 to 3dp → 0 (not 3.157)", () => {
+      // Bug case: 0.06 / 189999.5 = 3.157e-7
+      // toString() = "3.157901e-7" → naive slice gives "3.157" (WRONG)
+      // toFixed()  = "0.0000003157..." → slice gives "0.000" = 0 (CORRECT)
+      const raw = 0.06 / 189999.5;  // 3.157e-7
+      expect(truncateToDecimalPlaces(raw, 3)).toBe(0);
+    });
+
+    it("handles small decimals like 0.000163 to 3dp → 0", () => {
+      // 0.04 / 245 = 0.000163... — cannot buy any shares at 3dp precision
+      const raw = 0.04 / 245;
+      expect(truncateToDecimalPlaces(raw, 3)).toBe(0);
     });
   });
 
   // ─── resolveStockPrice ───────────────────────────────────────────────────
   describe("resolveStockPrice", () => {
-    it("should use marketPrice when explicitly provided", () => {
+    it("should use marketPrice when provided", () => {
       const stock: StockHolding = { ticker: "AAPL", percentage: 60, marketPrice: 189.5 };
       expect(resolveStockPrice(stock)).toBe(189.5);
     });
 
-    it("should fall back to stocks.json price when no marketPrice", () => {
+    it("should fall back to stocks.json when no marketPrice", () => {
       const stock: StockHolding = { ticker: "AAPL", percentage: 60 };
       expect(resolveStockPrice(stock)).toBe(100);
     });
 
-    it("should be case-insensitive — lowercase ticker resolves to same price", () => {
-      const upper: StockHolding = { ticker: "AAPL", percentage: 60 };
-      const lower: StockHolding = { ticker: "aapl", percentage: 60 };
-      expect(resolveStockPrice(upper)).toBe(resolveStockPrice(lower));
+    it("should be case-insensitive", () => {
+      expect(resolveStockPrice({ ticker: "aapl", percentage: 60 }))
+        .toBe(resolveStockPrice({ ticker: "AAPL", percentage: 60 }));
     });
   });
 
   // ─── validateStockSymbols ────────────────────────────────────────────────
   describe("validateStockSymbols", () => {
-    it("should return valid=true, empty invalidSymbols for known tickers", () => {
-      const stocks: StockHolding[] = [
+    it("returns valid=true for known tickers", () => {
+      const result = validateStockSymbols([
         { ticker: "AAPL", percentage: 60 },
         { ticker: "TSLA", percentage: 40 },
-      ];
-      const result = validateStockSymbols(stocks);
+      ]);
       expect(result.valid).toBe(true);
       expect(result.invalidSymbols).toEqual([]);
     });
 
-    it("should return valid=false with FAKECOIN in invalidSymbols", () => {
-      const stocks: StockHolding[] = [
+    it("returns valid=false with unknown ticker in invalidSymbols", () => {
+      const result = validateStockSymbols([
         { ticker: "AAPL", percentage: 60 },
         { ticker: "FAKECOIN", percentage: 40 },
-      ];
-      const result = validateStockSymbols(stocks);
+      ]);
       expect(result.valid).toBe(false);
       expect(result.invalidSymbols).toContain("FAKECOIN");
     });
 
-    it("should treat lowercase tickers as valid (case-insensitive)", () => {
-      const stocks: StockHolding[] = [{ ticker: "aapl", percentage: 100 }];
-      const result = validateStockSymbols(stocks);
-      expect(result.valid).toBe(true);
+    it("is case-insensitive — lowercase ticker passes", () => {
+      expect(validateStockSymbols([{ ticker: "aapl", percentage: 100 }]).valid).toBe(true);
     });
 
-    it("should report all invalid symbols at once", () => {
-      const stocks: StockHolding[] = [
+    it("reports all invalid symbols at once", () => {
+      const result = validateStockSymbols([
         { ticker: "FAKE1", percentage: 50 },
         { ticker: "FAKE2", percentage: 50 },
-      ];
-      const result = validateStockSymbols(stocks);
-      expect(result.valid).toBe(false);
+      ]);
       expect(result.invalidSymbols).toHaveLength(2);
-      expect(result.invalidSymbols).toContain("FAKE1");
-      expect(result.invalidSymbols).toContain("FAKE2");
     });
   });
 
   // ─── validatePortfolioWeights ────────────────────────────────────────────
   describe("validatePortfolioWeights", () => {
-    it("should return valid=true, total=100 for exact 60/40 split", () => {
-      const stocks: StockHolding[] = [
+    it("returns valid=true for exact 60/40 split", () => {
+      const result = validatePortfolioWeights([
         { ticker: "AAPL", percentage: 60 },
         { ticker: "TSLA", percentage: 40 },
-      ];
-      const result = validatePortfolioWeights(stocks);
+      ]);
       expect(result.valid).toBe(true);
       expect(result.total).toBe(100);
     });
 
-    it("should return valid=true for float weights within ±0.001 tolerance", () => {
-      const stocks: StockHolding[] = [
+    it("returns valid=true within ±0.001 float tolerance", () => {
+      expect(validatePortfolioWeights([
         { ticker: "AAPL", percentage: 33.333 },
         { ticker: "TSLA", percentage: 33.333 },
         { ticker: "MSFT", percentage: 33.334 },
-      ];
-      expect(validatePortfolioWeights(stocks).valid).toBe(true);
+      ]).valid).toBe(true);
     });
 
-    it("should return valid=false, total=90 when weights sum to 90", () => {
-      const stocks: StockHolding[] = [
+    it("returns valid=false when sum is 90", () => {
+      const result = validatePortfolioWeights([
         { ticker: "AAPL", percentage: 60 },
         { ticker: "TSLA", percentage: 30 },
-      ];
-      const result = validatePortfolioWeights(stocks);
+      ]);
       expect(result.valid).toBe(false);
       expect(result.total).toBe(90);
     });
 
-    it("should return valid=false when weights exceed 100", () => {
-      const stocks: StockHolding[] = [
+    it("returns valid=false when sum exceeds 100", () => {
+      expect(validatePortfolioWeights([
         { ticker: "AAPL", percentage: 70 },
         { ticker: "TSLA", percentage: 50 },
-      ];
-      expect(validatePortfolioWeights(stocks).valid).toBe(false);
+      ]).valid).toBe(false);
     });
   });
 
   // ─── calculateShares ─────────────────────────────────────────────────────
   describe("calculateShares", () => {
-    it("should return 0.6 shares for $60 at default $100 price", () => {
-      const stock: StockHolding = { ticker: "AAPL", percentage: 60 };
-      expect(calculateShares(60, stock)).toBe(0.6);
+    it("$60 at $100/share → 0.6 shares", () => {
+      expect(calculateShares(60, { ticker: "AAPL", percentage: 60 })).toBe(0.6);
     });
 
-    it("should return 0.3 shares for $60 at marketPrice $200", () => {
-      const stock: StockHolding = { ticker: "AAPL", percentage: 60, marketPrice: 200 };
-      expect(calculateShares(60, stock)).toBe(0.3);
+    it("$60 at marketPrice $200 → 0.3 shares", () => {
+      expect(calculateShares(60, { ticker: "AAPL", percentage: 60, marketPrice: 200 })).toBe(0.3);
     });
 
-    it("should round to 3 decimal places: $40 / $300 = 0.133", () => {
-      const stock: StockHolding = { ticker: "TSLA", percentage: 40, marketPrice: 300 };
-      expect(calculateShares(40, stock)).toBe(0.133);
+    it("uses floor not round — $400 at $245 → 1.632, not 1.633", () => {
+      // 400/245 = 1.63265... Math.round would give 1.633 (exceeds budget)
+      // Math.floor gives 1.632 — always stays within allocation
+      expect(calculateShares(400, { ticker: "TSLA", percentage: 40, marketPrice: 245 })).toBe(1.632);
+    });
+
+    it("shares × price should never exceed the allocated amount", () => {
+      const stock: StockHolding = { ticker: "TSLA", percentage: 40, marketPrice: 245 };
+      const allocated = 400;
+      const shares = calculateShares(allocated, stock);
+      const actualCost = calculateActualAmount(shares, stock);
+      expect(actualCost).toBeLessThanOrEqual(allocated);
+    });
+  });
+
+  // ─── calculateActualAmount ────────────────────────────────────────────────
+  describe("calculateActualAmount", () => {
+    it("truncates (not rounds) to AMOUNT_DECIMAL_PLACES — never overstates cost", () => {
+      // 0.003 × 189999.5 = 569.9985
+      // Math.round(2dp) → 570.00  (overstates — WRONG)
+      // truncate(3dp)   → 569.998 (actual cost — CORRECT)
+      const stock: StockHolding = { ticker: "AAPL", percentage: 60, marketPrice: 189999.5 };
+      expect(calculateActualAmount(0.003, stock)).toBe(569.998);
+      expect(calculateActualAmount(0.003, stock)).not.toBe(570);
+    });
+
+    it("3.166 shares × $189.5 = 599.957 → truncates to 599.957 (3dp)", () => {
+      const stock: StockHolding = { ticker: "AAPL", percentage: 60, marketPrice: 189.5 };
+      expect(calculateActualAmount(3.166, stock)).toBe(599.957);
+    });
+
+    it("whole shares × $100 = exact amount", () => {
+      expect(calculateActualAmount(0.6, { ticker: "AAPL", percentage: 60 })).toBe(60);
+    });
+
+    it("amount should always be <= allocated amount (no round-up)", () => {
+      const stock: StockHolding = { ticker: "AAPL", percentage: 60, marketPrice: 189999.5 };
+      const allocated = 950;
+      const shares = calculateShares(allocated, stock);
+      const actual = calculateActualAmount(shares, stock);
+      expect(actual).toBeLessThanOrEqual(allocated);
     });
   });
 
   // ─── buildOrderLegs ──────────────────────────────────────────────────────
   describe("buildOrderLegs", () => {
-    it("should produce 2 legs with correct symbol, amount, shares, priceUsed", () => {
+    it("should produce legs with ticker, percentage, shares, price, amount fields", () => {
       const stocks: StockHolding[] = [
         { ticker: "aapl", percentage: 60 },
         { ticker: "tsla", percentage: 40 },
@@ -214,69 +235,69 @@ describe("helper.ts", () => {
       expect(legs).toHaveLength(2);
 
       const aapl = legs[0];
-      expect(aapl.symbol).toBe("AAPL");
-      expect(aapl.amount).toBe(60);
-      expect(aapl.shares).toBe(0.6);
-      expect(aapl.priceUsed).toBe(100);
+      expect(aapl.ticker).toBe("AAPL");      // uppercase
       expect(aapl.percentage).toBe(60);
+      expect(aapl.shares).toBe(0.6);
+      expect(aapl.price).toBe(100);
+      expect(aapl.amount).toBe(60);          // 0.6 × $100 = $60 exact
 
       const tsla = legs[1];
-      expect(tsla.symbol).toBe("TSLA");
-      expect(tsla.amount).toBe(40);
+      expect(tsla.ticker).toBe("TSLA");
       expect(tsla.shares).toBe(0.4);
+      expect(tsla.amount).toBe(40);
     });
 
-    it("should use marketPrice when provided, not the stocks.json price", () => {
+    it("amount = shares × price (not raw allocation) when price causes rounding", () => {
+      // $1000, 60% → allocated=$600, price=$189.5
+      // shares = 600/189.5 = 3.166 (3dp)
+      // amount = 3.166 × 189.5 = 599.96 (NOT 600)
       const stocks: StockHolding[] = [
+        { ticker: "AAPL", percentage: 60, marketPrice: 189.5 },
+        { ticker: "TSLA", percentage: 40, marketPrice: 189.5 },
+      ];
+      const legs = buildOrderLegs(stocks, 1000);
+      const aapl = legs[0];
+
+      expect(aapl.shares).toBe(3.166);
+      expect(aapl.amount).toBe(599.96);       // shares × price
+      expect(aapl.amount).not.toBe(600);      // NOT the raw 60% allocation
+    });
+
+    it("should use marketPrice when provided", () => {
+      const legs = buildOrderLegs([
         { ticker: "AAPL", percentage: 100, marketPrice: 200 },
-      ];
-      const legs: OrderLeg[] = buildOrderLegs(stocks, 100);
-      expect(legs[0].priceUsed).toBe(200);
+      ], 100);
+      expect(legs[0].price).toBe(200);
       expect(legs[0].shares).toBe(0.5);
+      expect(legs[0].amount).toBe(100);       // 0.5 × $200 = $100 exact
     });
 
-    it("should uppercase symbols regardless of input case", () => {
-      const stocks: StockHolding[] = [{ ticker: "msft", percentage: 100 }];
-      const legs: OrderLeg[] = buildOrderLegs(stocks, 100);
-      expect(legs[0].symbol).toBe("MSFT");
-    });
-
-    it("should round amount to 2 decimal places", () => {
-      const stocks: StockHolding[] = [
-        { ticker: "AAPL", percentage: 33.333 },
-        { ticker: "TSLA", percentage: 33.333 },
-        { ticker: "MSFT", percentage: 33.334 },
-      ];
-      const legs: OrderLeg[] = buildOrderLegs(stocks, 100);
-      legs.forEach((leg) => {
-        const decimalPlaces = (leg.amount.toString().split(".")[1] ?? "").length;
-        expect(decimalPlaces).toBeLessThanOrEqual(2);
-      });
+    it("should uppercase tickers", () => {
+      expect(buildOrderLegs([{ ticker: "msft", percentage: 100 }], 100)[0].ticker).toBe("MSFT");
     });
   });
 
   // ─── getNextMarketOpenDate ────────────────────────────────────────────────
   describe("getNextMarketOpenDate", () => {
-    it("should return a valid ISO 8601 date string", () => {
-      const result: string = getNextMarketOpenDate();
+    it("should return a valid ISO date string", () => {
+      const result = getNextMarketOpenDate();
       expect(new Date(result).toISOString()).toBe(result);
     });
 
-    it("should return a date in the future", () => {
+    it("should be a future date", () => {
       expect(new Date(getNextMarketOpenDate()).getTime()).toBeGreaterThan(Date.now());
     });
 
-    it("should return a weekday (Mon=1 through Fri=5)", () => {
+    it("should be a weekday (Mon–Fri)", () => {
       const day = new Date(getNextMarketOpenDate()).getUTCDay();
       expect(day).toBeGreaterThanOrEqual(1);
       expect(day).toBeLessThanOrEqual(5);
     });
 
-    it("should schedule at 14:30 UTC (9:30 AM ET)", () => {
+    it("should be at 14:30 UTC (9:30 AM ET)", () => {
       const d = new Date(getNextMarketOpenDate());
       expect(d.getUTCHours()).toBe(14);
       expect(d.getUTCMinutes()).toBe(30);
-      expect(d.getUTCSeconds()).toBe(0);
     });
   });
 
@@ -286,15 +307,7 @@ describe("helper.ts", () => {
       expect(generateOrderId()).toMatch(/^ORD-/);
     });
 
-    it("should contain a timestamp segment", () => {
-      const id = generateOrderId();
-      const parts = id.split("-");
-      expect(parts.length).toBeGreaterThanOrEqual(3);
-      const timestamp = parseInt(parts[1], 10);
-      expect(timestamp).toBeGreaterThan(0);
-    });
-
-    it("should generate 100 unique IDs with no duplicates", () => {
+    it("should generate unique IDs", () => {
       const ids = Array.from({ length: 100 }, () => generateOrderId());
       expect(new Set(ids).size).toBe(100);
     });

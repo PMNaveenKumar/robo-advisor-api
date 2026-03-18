@@ -1,26 +1,58 @@
 import { Request, Response, NextFunction } from "express";
 import { HttpError } from "routing-controllers";
+import { ValidationError } from "class-validator";
 import { AppError } from "../errors/AppError";
 import { ApiErrorResponse } from "../types";
 import { ERROR_MESSAGES } from "../constants/errorMessages";
 import { logger } from "./loggerMiddleware";
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function extractValidationMessages(
+  errors: ValidationError[],
+  parentPath = ""
+): string[] {
+  const messages: string[] = [];
+
+  for (const error of errors) {
+    const path = parentPath
+      ? `${parentPath}.${error.property}`
+      : error.property;
+
+    // Leaf node — has constraint messages
+    if (error.constraints) {
+      messages.push(...Object.values(error.constraints));
+    }
+
+    // Nested errors (e.g. portfolio.stocks[0].ticker)
+    if (error.children && error.children.length > 0) {
+      messages.push(...extractValidationMessages(error.children, path));
+    }
+  }
+
+  return messages;
+}
+
+/**
+ * Checks whether an error is a routing-controllers validation HttpError
+ * by looking for the err.errors[] array of ValidationError objects.
+ */
+function isValidationHttpError(
+  err: HttpError
+): err is HttpError & { errors: ValidationError[] } {
+  const errAsUnknown = err as unknown as Record<string, unknown>;
+  return (
+    Array.isArray(errAsUnknown["errors"]) &&
+    errAsUnknown["errors"] !== null
+  );
+}
+
+// ─── Global Error Handler ─────────────────────────────────────────────────────
+
 /**
  * globalErrorHandler
- * Handles ALL errors with defaultErrorHandler: false in app.ts.
- *
- * Three types handled:
- *
- * 1. AppError (our own — thrown from services)
- *    e.g. AppError("Order not found", 404), AppError("Unknown stock", 400)
- *    → uses err.statusCode directly (400 / 401 / 404 / 500)
- *
- * 2. HttpError (routing-controllers — thrown for validation failures, bad body)
- *    e.g. HttpError(400, "Validation failed") from @Body({ validate: true })
- *    → uses err.httpCode directly
- *
- * 3. Plain Error (unexpected crash — null ref, type error, etc.)
- *    → always 500, never expose internals to client
+ * Handles ALL errors in one place — AppError, HttpError (with validation details),
+ * and unexpected plain Errors.
  */
 export function globalErrorHandler(
   err: Error | AppError | HttpError,
@@ -33,7 +65,7 @@ export function globalErrorHandler(
     return;
   }
 
-  // ── 1. AppError — operational errors from services ────────────────────────
+  // ── 1. AppError — our own operational errors from services ────────────────
   if (err instanceof AppError) {
     logger.error(`${err.name}: ${err.message}`, {
       method: req.method,
@@ -51,9 +83,23 @@ export function globalErrorHandler(
     return;
   }
 
-  // ── 2. HttpError — routing-controllers validation / bad request errors ────
+  // ── 2. HttpError — routing-controllers errors ─────────────────────────────
   if (err instanceof HttpError) {
-    logger.error(`HttpError ${err.httpCode}: ${err.message}`, {
+    let message: string;
+    let errors: string[] | undefined;
+
+    if (isValidationHttpError(err)) {
+      // class-validator errors — extract per-field messages from err.errors[]
+      const messages = extractValidationMessages(err.errors);
+      message = messages.length > 0
+        ? messages.join("; ")
+        : ERROR_MESSAGES.VALIDATION.FAILED;
+      errors = messages;
+    } else {
+      message = err.message;
+    }
+
+    logger.error(`HttpError ${err.httpCode}: ${message}`, {
       method: req.method,
       url: req.originalUrl,
       statusCode: err.httpCode,
@@ -62,8 +108,9 @@ export function globalErrorHandler(
 
     const response: ApiErrorResponse = {
       success: false,
-      message: err.message,
+      message,
       statusCode: err.httpCode,
+      ...(errors && { errors }),
     };
     res.status(err.httpCode).json(response);
     return;

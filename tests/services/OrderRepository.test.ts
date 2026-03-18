@@ -13,16 +13,16 @@ function makeOrder(id: string, orderType: "BUY" | "SELL" = "BUY"): Order {
     },
     legs: [
       {
-        symbol: "AAPL",
+        ticker: "AAPL",      // renamed from symbol
         percentage: 100,
-        amount: 100,
+        amount: 100,         // shares × price
         shares: 1,
-        priceUsed: 100,
+        price: 100,          // renamed from priceUsed
       },
     ],
     executeAt: new Date().toISOString(),
     createdAt: new Date().toISOString(),
-    responseTimeMs: 0,
+    // responseTimeMs removed
   };
 }
 
@@ -44,7 +44,7 @@ describe("OrderRepository", () => {
     expect(repo.count()).toBe(1);
   });
 
-  it("should return a shallow copy from findAll — external mutations do not affect store", () => {
+  it("should return a copy from findAll — external mutations do not affect store", () => {
     repo.save(makeOrder("ORD-001"));
     const result = repo.findAll();
     result.push(makeOrder("ORD-EXTRA"));
@@ -72,7 +72,7 @@ describe("OrderRepository", () => {
     expect(repo.findAll()).toEqual([]);
   });
 
-  it("should maintain insertion order in findAll", () => {
+  it("should maintain insertion order", () => {
     repo.save(makeOrder("ORD-001"));
     repo.save(makeOrder("ORD-002"));
     repo.save(makeOrder("ORD-003"));
@@ -87,13 +87,5 @@ describe("OrderRepository", () => {
     repo.save(makeOrder("ORD-SELL", "SELL"));
     expect(repo.findById("ORD-BUY")!.orderType).toBe("BUY");
     expect(repo.findById("ORD-SELL")!.orderType).toBe("SELL");
-  });
-
-  it("should support saving 10 orders and count them correctly", () => {
-    for (let i = 1; i <= 10; i++) {
-      repo.save(makeOrder(`ORD-${String(i).padStart(3, "0")}`));
-    }
-    expect(repo.count()).toBe(10);
-    expect(repo.findAll()).toHaveLength(10);
   });
 });

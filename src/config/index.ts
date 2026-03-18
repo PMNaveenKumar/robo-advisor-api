@@ -21,6 +21,7 @@ const appConfig = {
   business: {
     defaultStockPrice: parseFloat(process.env.DEFAULT_STOCK_PRICE ?? "100"),
     shareDecimalPlaces: parseInt(process.env.SHARE_DECIMAL_PLACES ?? "3", 10),
+    amountDecimalPlaces: parseInt(process.env.AMOUNT_DECIMAL_PLACES ?? "3", 10),
   },
   rateLimit: {
     windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS ?? "900000", 10), // 15 min

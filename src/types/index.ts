@@ -14,11 +14,11 @@ export interface ModelPortfolio {
 }
 
 export interface OrderLeg {
-  symbol: string;
+  ticker: string; 
   percentage: number;
   amount: number;
   shares: number;
-  priceUsed: number;
+  price: number;
 }
 
 export interface Order {
@@ -29,7 +29,6 @@ export interface Order {
   legs: OrderLeg[];
   executeAt: string;
   createdAt: string;
-  responseTimeMs: number;
 }
 
 // ─── Response Types ───────────────────────────────────────────────────────────
@@ -74,7 +73,6 @@ export interface StaticUser {
 }
 
 // ─── Express augmentation ─────────────────────────────────────────────────────
-// Extends Express Request with decoded JWT user and X-Request-ID correlation ID.
 
 declare global {
   namespace Express {

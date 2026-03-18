@@ -45,11 +45,12 @@ export class SplitOrderRequestSchema {
   @Type(() => ModelPortfolioSchema)
   portfolio!: ModelPortfolioSchema;
 
-  @IsNumber({}, { message: "Total amount must be a number" })
-  @IsPositive({ message: "Total amount must be positive" })
+  @IsNumber({}, { message: "totalAmount must be a number" })
+  @IsPositive({ message: "totalAmount must be greater than 0" })
+  @Min(0.01, { message: "totalAmount must be at least 0.01" })
   totalAmount!: number;
 
-  @IsIn(["BUY", "SELL"], { message: "orderType must be BUY or SELL" })
+  @IsIn(["BUY", "SELL"], { message: "orderType must be 'BUY' or 'SELL'" })
   orderType!: "BUY" | "SELL";
 }
 
