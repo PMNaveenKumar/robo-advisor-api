@@ -14,11 +14,11 @@ export interface ModelPortfolio {
 }
 
 export interface OrderLeg {
-  ticker: string; 
+  ticker: string;       // renamed from symbol
   percentage: number;
-  amount: number;
+  amount: number;       // now = shares × price (actual cost after share rounding)
   shares: number;
-  price: number;
+  price: number;        // renamed from priceUsed
 }
 
 export interface Order {
@@ -29,6 +29,7 @@ export interface Order {
   legs: OrderLeg[];
   executeAt: string;
   createdAt: string;
+  // responseTimeMs removed — not part of financial domain model
 }
 
 // ─── Response Types ───────────────────────────────────────────────────────────
@@ -36,6 +37,28 @@ export interface Order {
 export interface SplitOrderResponse {
   success: boolean;
   data: Order;
+  market: {
+    tradingDays:   string;
+    openTime:      string;
+    closeTime:     string;
+    timezone:      string;
+    currentlyOpen: boolean;
+    nextOpenAt:    string | null;
+  };
+}
+
+export interface MarketClosedResponse {
+  success: true;
+  status:  "MARKET_CLOSED";
+  message: string;
+  market: {
+    tradingDays:   string;
+    openTime:      string;
+    closeTime:     string;
+    timezone:      string;
+    currentlyOpen: false;
+    nextOpenAt:    string;
+  };
 }
 
 export interface HistoricOrdersResponse {

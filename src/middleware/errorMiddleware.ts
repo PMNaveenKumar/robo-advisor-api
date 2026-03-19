@@ -13,47 +13,46 @@ function extractValidationMessages(
   parentPath = ""
 ): string[] {
   const messages: string[] = [];
-
   for (const error of errors) {
-    const path = parentPath
-      ? `${parentPath}.${error.property}`
-      : error.property;
-
-    // Leaf node — has constraint messages
+    const path = parentPath ? `${parentPath}.${error.property}` : error.property;
     if (error.constraints) {
       messages.push(...Object.values(error.constraints));
     }
-
-    // Nested errors (e.g. portfolio.stocks[0].ticker)
     if (error.children && error.children.length > 0) {
       messages.push(...extractValidationMessages(error.children, path));
     }
   }
-
   return messages;
 }
 
-/**
- * Checks whether an error is a routing-controllers validation HttpError
- * by looking for the err.errors[] array of ValidationError objects.
- */
 function isValidationHttpError(
   err: HttpError
 ): err is HttpError & { errors: ValidationError[] } {
-  const errAsUnknown = err as unknown as Record<string, unknown>;
-  return (
-    Array.isArray(errAsUnknown["errors"]) &&
-    errAsUnknown["errors"] !== null
-  );
+  const e = err as unknown as Record<string, unknown>;
+  return Array.isArray(e["errors"]) && e["errors"] !== null;
+}
+
+// ─── Severity helper ─────────────────────────────────────────────────────────
+
+/**
+ * Picks log severity based on HTTP status code.
+ *
+ *   5xx → ERROR  (server fault — needs alert)
+ *   4xx → WARN   (client error — expected, should NOT fire production alerts)
+ *   other → INFO
+ */
+function logForStatus(statusCode: number, message: string, meta: Record<string, unknown>): void {
+  if (statusCode >= 500) {
+    logger.error(message, meta);
+  } else if (statusCode >= 400) {
+    logger.warn(message, meta);
+  } else {
+    logger.info(message, meta);
+  }
 }
 
 // ─── Global Error Handler ─────────────────────────────────────────────────────
 
-/**
- * globalErrorHandler
- * Handles ALL errors in one place — AppError, HttpError (with validation details),
- * and unexpected plain Errors.
- */
 export function globalErrorHandler(
   err: Error | AppError | HttpError,
   req: Request,
@@ -65,13 +64,12 @@ export function globalErrorHandler(
     return;
   }
 
+  const meta = { method: req.method, url: req.originalUrl, requestId: req.requestId };
+
   // ── 1. AppError — our own operational errors from services ────────────────
   if (err instanceof AppError) {
-    logger.error(`${err.name}: ${err.message}`, {
-      method: req.method,
-      url: req.originalUrl,
-      statusCode: err.statusCode,
-      requestId: req.requestId,
+    logForStatus(err.statusCode, `${err.name}: ${err.message}`, {
+      ...meta, statusCode: err.statusCode,
     });
 
     const response: ApiErrorResponse = {
@@ -83,27 +81,21 @@ export function globalErrorHandler(
     return;
   }
 
-  // ── 2. HttpError — routing-controllers errors ─────────────────────────────
+  // ── 2. HttpError — routing-controllers validation / bad request errors ────
   if (err instanceof HttpError) {
     let message: string;
     let errors: string[] | undefined;
 
     if (isValidationHttpError(err)) {
-      // class-validator errors — extract per-field messages from err.errors[]
       const messages = extractValidationMessages(err.errors);
-      message = messages.length > 0
-        ? messages.join("; ")
-        : ERROR_MESSAGES.VALIDATION.FAILED;
+      message = messages.length > 0 ? messages.join("; ") : ERROR_MESSAGES.VALIDATION.FAILED;
       errors = messages;
     } else {
       message = err.message;
     }
 
-    logger.error(`HttpError ${err.httpCode}: ${message}`, {
-      method: req.method,
-      url: req.originalUrl,
-      statusCode: err.httpCode,
-      requestId: req.requestId,
+    logForStatus(err.httpCode, `HttpError ${err.httpCode}: ${message}`, {
+      ...meta, statusCode: err.httpCode,
     });
 
     const response: ApiErrorResponse = {
@@ -116,12 +108,9 @@ export function globalErrorHandler(
     return;
   }
 
-  // ── 3. Unexpected crash — never expose internals to client ────────────────
+  // ── 3. Unexpected crash — always ERROR ────────────────────────────────────
   logger.error(`UNEXPECTED ERROR: ${err.message}`, {
-    method: req.method,
-    url: req.originalUrl,
-    stack: err.stack,
-    requestId: req.requestId,
+    ...meta, stack: err.stack,
   });
 
   const response: ApiErrorResponse = {

@@ -3,12 +3,13 @@ import { OrderRepository } from "../data/OrderRepository";
 import {
   buildOrderLegs,
   generateOrderId,
-  getNextMarketOpenDate,
   validatePortfolioWeights,
   validateStockSymbols,
   getAvailableStocks,
+  isMarketOpen,
+  getMarketInfo,
 } from "../helpers/helper";
-import { HistoricOrdersResponse, Order, SplitOrderResponse } from "../types";
+import { HistoricOrdersResponse, MarketClosedResponse, Order, SplitOrderResponse } from "../types";
 import { SplitOrderRequestSchema } from "../schemas";
 import { AppError } from "../errors/AppError";
 import { ERROR_MESSAGES } from "../constants/errorMessages";
@@ -19,8 +20,27 @@ export class OrderService {
     @Inject() private readonly orderRepository: OrderRepository
   ) {}
 
-  splitOrder(request: SplitOrderRequestSchema): SplitOrderResponse {
+  splitOrder(request: SplitOrderRequestSchema): SplitOrderResponse | MarketClosedResponse {
     try {
+      // Check market status first — return 200 MARKET_CLOSED if outside trading hours
+      if (!isMarketOpen()) {
+        const marketInfo = getMarketInfo();
+        const response: MarketClosedResponse = {
+          success:  true,
+          status:   "MARKET_CLOSED",
+          message:  `Market is currently closed. Next open: ${marketInfo.nextOpenAt}`,
+          market: {
+            tradingDays:   marketInfo.tradingDays,
+            openTime:      marketInfo.openTime,
+            closeTime:     marketInfo.closeTime,
+            timezone:      marketInfo.timezone,
+            currentlyOpen: false,
+            nextOpenAt:    marketInfo.nextOpenAt as string,
+          },
+        };
+        return response;
+      }
+
       const { portfolio, totalAmount, orderType } = request;
 
       const { valid: symbolsValid, invalidSymbols } = validateStockSymbols(portfolio.stocks);
@@ -34,17 +54,30 @@ export class OrderService {
         throw new AppError(ERROR_MESSAGES.ORDER.WEIGHTS_INVALID(total), 400);
       }
 
+      const now = new Date().toISOString();
       const order: Order = {
-        id: generateOrderId(),
+        id:         generateOrderId(),
         orderType,
         totalAmount,
         portfolio,
-        legs: buildOrderLegs(portfolio.stocks, totalAmount),
-        executeAt: getNextMarketOpenDate(),
-        createdAt: new Date().toISOString()
+        legs:       buildOrderLegs(portfolio.stocks, totalAmount),
+        executeAt:  now, // market is open — execute immediately
+        createdAt:  now,
       };
 
-      return { success: true, data: this.orderRepository.save(order) };
+      const marketInfo = getMarketInfo();
+      return {
+        success: true,
+        data:    this.orderRepository.save(order),
+        market: {
+          tradingDays:   marketInfo.tradingDays,
+          openTime:      marketInfo.openTime,
+          closeTime:     marketInfo.closeTime,
+          timezone:      marketInfo.timezone,
+          currentlyOpen: true,
+          nextOpenAt:    null,
+        },
+      };
     } catch (err: unknown) {
       if (err instanceof AppError) throw err;
       throw new AppError(ERROR_MESSAGES.GENERIC.INTERNAL_SERVER_ERROR, 500);

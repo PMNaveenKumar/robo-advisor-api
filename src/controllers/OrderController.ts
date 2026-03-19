@@ -15,6 +15,7 @@ import { SplitOrderRequestSchema } from "../schemas";
 import {
   HistoricOrdersResponse,
   JwtPayload,
+  MarketClosedResponse,
   SplitOrderResponse,
   Order,
 } from "../types";
@@ -53,7 +54,7 @@ export class OrderController {
   splitOrder(
     @Body({ validate: true }) body: SplitOrderRequestSchema,
     @CurrentUser() _user: JwtPayload
-  ): SplitOrderResponse {
+  ): SplitOrderResponse | MarketClosedResponse {
     // AppError thrown by OrderService bubbles up to globalErrorHandler automatically
     return this.orderService.splitOrder(body);
   }

@@ -1,18 +1,16 @@
 import { Request, Response, NextFunction } from "express";
 import { Logger } from "../utils/logger";
 
-// Single shared Logger instance used across the entire application
 export const logger = new Logger();
 
 /**
  * loggerMiddleware
- * Logs every HTTP request: method, URL, status, duration, and X-Request-ID.
- * Runs after requestIdMiddleware so req.requestId is already populated.
+ * Logs every HTTP request with method, URL, status, duration, and X-Request-ID.
  *
- * Output goes to:
- *   console          (always)
- *   logs/access-YYYY-MM-DD.log   (INFO requests)
- *   logs/error-YYYY-MM-DD.log    (ERROR only)
+ * Severity rules:
+ *   5xx → ERROR  (server faults — need immediate attention)
+ *   4xx → WARN   (client errors — expected, should not fire alerts)
+ *   2xx/3xx → INFO
  */
 export function loggerMiddleware(
   req: Request,
@@ -23,21 +21,23 @@ export function loggerMiddleware(
 
   res.on("finish", () => {
     const durationMs: number = Date.now() - startTime;
-    const isError = res.statusCode >= 400;
+    const status = res.statusCode;
 
     const meta = {
       method: req.method,
       url: req.originalUrl,
-      status: res.statusCode,
+      status,
       durationMs,
       requestId: req.requestId,
       ip: req.ip,
     };
 
-    const message = `${req.method} ${req.originalUrl} → ${res.statusCode} | ${durationMs}ms`;
+    const message = `${req.method} ${req.originalUrl} → ${status} | ${durationMs}ms`;
 
-    if (isError) {
-      logger.error(message, meta);
+    if (status >= 500) {
+      logger.error(message, meta);     // server fault
+    } else if (status >= 400) {
+      logger.warn(message, meta);      // client error — WARN, not ERROR
     } else {
       logger.info(message, meta);
     }
