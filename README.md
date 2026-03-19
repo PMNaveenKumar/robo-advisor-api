@@ -27,7 +27,7 @@ Production-grade Node.js + TypeScript REST API using `routing-controllers`, `typ
 ```
 src/
 ├── app.ts                          Express factory + server entry
-├── config/index.ts                 .env → typed config + config.json
+├── config/index.ts                 .env → typed config (no config.json written to disk)
 ├── constants/errorMessages.ts      All error strings (single source of truth)
 ├── controllers/
 │   ├── AuthController.ts           POST /api/auth/login  (rate limited)
@@ -120,8 +120,13 @@ HTTP server: `http://localhost:3000` (redirects to HTTPS)
 | `JWT_EXPIRES_IN` | `1h` | Token expiry |
 | `ALLOWED_ORIGINS` | `http://localhost:3000,...` | Comma-separated CORS origins |
 | `DEFAULT_STOCK_PRICE` | `100` | Fallback if ticker not in stocks.json |
-| `SHARE_DECIMAL_PLACES` | `3` | Share quantity precision |
-| `RATE_LIMIT_WINDOW_MS` | `900000` | Rate limit window (15 min) |
+| `SHARE_DECIMAL_PLACES` | `3` | Share quantity precision (e.g. 3 → 1.632 shares) |
+| `AMOUNT_DECIMAL_PLACES` | `3` | Amount precision (e.g. 3 → 599.957) |
+| `MARKET_OPEN_HOUR` | `9` | Market open hour in ET (24h format) |
+| `MARKET_OPEN_MINUTE` | `30` | Market open minute in ET |
+| `MARKET_CLOSE_HOUR` | `16` | Market close hour in ET (24h format) |
+| `MARKET_CLOSE_MINUTE` | `0` | Market close minute in ET |
+| `RATE_LIMIT_WINDOW_MS` | `900000` | Rate limit window for login (15 min) |
 | `RATE_LIMIT_MAX_REQUESTS` | `10` | Max login attempts per window per IP |
 
 ---
@@ -213,7 +218,25 @@ curl -X POST http://localhost:3000/api/auth/login \
   -d '{"username":"admin","password":"admin123"}'
 ```
 
-### Split Order
+**Response (200):**
+```json
+{
+  "success": true,
+  "token": "eyJhbGciOiJIUzI1NiIs...",
+  "expiresIn": "1h"
+}
+```
+
+---
+
+> For all requests below, replace `<TOKEN>` with the token from the login response.
+
+---
+
+### Split Order — Market Open
+
+When the market is open (Mon–Fri, 09:30–16:00 ET), the order is executed immediately:
+
 ```bash
 curl -X POST http://localhost:3000/api/orders/split \
   -H "Content-Type: application/json" \
@@ -226,10 +249,127 @@ curl -X POST http://localhost:3000/api/orders/split \
         { "ticker": "TSLA", "percentage": 40 }
       ]
     },
-    "totalAmount": 100,
+    "totalAmount": 1000,
     "orderType": "BUY"
   }'
 ```
+
+**Response (201):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "ORD-1710000000000-ABC12",
+    "orderType": "BUY",
+    "totalAmount": 1000,
+    "legs": [
+      { "ticker": "AAPL", "percentage": 60, "shares": 6, "price": 100, "amount": 600 },
+      { "ticker": "TSLA", "percentage": 40, "shares": 4, "price": 100, "amount": 400 }
+    ],
+    "executeAt": "2024-03-17T14:32:00.000Z",
+    "createdAt": "2024-03-17T14:32:00.000Z"
+  },
+  "market": {
+    "tradingDays": "Monday to Friday",
+    "openTime": "09:30 ET (EDT UTC-4)",
+    "closeTime": "16:00 ET (EDT UTC-4)",
+    "timezone": "America/New_York",
+    "currentlyOpen": true,
+    "nextOpenAt": null
+  }
+}
+```
+
+---
+
+### Split Order — Market Closed
+
+When the market is closed (outside Mon–Fri 09:30–16:00 ET), the order is **not created**. The API returns `200` with a `MARKET_CLOSED` status and the next market open time:
+
+```bash
+curl -X POST http://localhost:3000/api/orders/split \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <TOKEN>" \
+  -d '{
+    "portfolio": {
+      "name": "Tech Growth",
+      "stocks": [
+        { "ticker": "AAPL", "percentage": 60 },
+        { "ticker": "TSLA", "percentage": 40 }
+      ]
+    },
+    "totalAmount": 1000,
+    "orderType": "BUY"
+  }'
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "status": "MARKET_CLOSED",
+  "message": "Market is currently closed. Next open: 2024-03-18T13:30:00.000Z",
+  "market": {
+    "tradingDays": "Monday to Friday",
+    "openTime": "09:30 ET (EDT UTC-4)",
+    "closeTime": "16:00 ET (EDT UTC-4)",
+    "timezone": "America/New_York",
+    "currentlyOpen": false,
+    "nextOpenAt": "2024-03-18T13:30:00.000Z"
+  }
+}
+```
+
+> **Note:** No order is created when the market is closed. Re-submit the request after `nextOpenAt`.
+
+---
+
+### Split Order — With Market Price Override
+
+```bash
+curl -X POST http://localhost:3000/api/orders/split \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <TOKEN>" \
+  -d '{
+    "portfolio": {
+      "name": "Real Prices",
+      "stocks": [
+        { "ticker": "AAPL", "percentage": 60, "marketPrice": 189.5 },
+        { "ticker": "TSLA", "percentage": 40, "marketPrice": 245.00 }
+      ]
+    },
+    "totalAmount": 1000,
+    "orderType": "BUY"
+  }'
+```
+
+**Response (201):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "ORD-1710000000001-XYZ99",
+    "orderType": "BUY",
+    "totalAmount": 1000,
+    "legs": [
+      { "ticker": "AAPL", "percentage": 60, "shares": 3.166, "price": 189.5, "amount": 599.957 },
+      { "ticker": "TSLA", "percentage": 40, "shares": 1.632, "price": 245, "amount": 399.84 }
+    ],
+    "executeAt": "2024-03-17T14:32:00.000Z",
+    "createdAt": "2024-03-17T14:32:00.000Z"
+  },
+  "market": {
+    "tradingDays": "Monday to Friday",
+    "openTime": "09:30 ET (EDT UTC-4)",
+    "closeTime": "16:00 ET (EDT UTC-4)",
+    "timezone": "America/New_York",
+    "currentlyOpen": true,
+    "nextOpenAt": null
+  }
+}
+```
+
+---
 
 ### Get All Orders
 ```bash
@@ -237,8 +377,99 @@ curl -X GET http://localhost:3000/api/orders \
   -H "Authorization: Bearer <TOKEN>"
 ```
 
+**Response (200):**
+```json
+{
+  "success": true,
+  "count": 2,
+  "data": [
+    { "id": "ORD-...", "orderType": "BUY", "totalAmount": 1000, "legs": [...] },
+    { "id": "ORD-...", "orderType": "SELL", "totalAmount": 500, "legs": [...] }
+  ]
+}
+```
+
+---
+
 ### Get Order by ID
 ```bash
 curl -X GET http://localhost:3000/api/orders/<ORDER_ID> \
   -H "Authorization: Bearer <TOKEN>"
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "ORD-1710000000000-ABC12",
+    "orderType": "BUY",
+    "totalAmount": 1000,
+    "legs": [
+      { "ticker": "AAPL", "percentage": 60, "shares": 6, "price": 100, "amount": 600 },
+      { "ticker": "TSLA", "percentage": 40, "shares": 4, "price": 100, "amount": 400 }
+    ],
+    "executeAt": "2024-03-17T14:32:00.000Z",
+    "createdAt": "2024-03-17T14:32:00.000Z"
+  }
+}
+```
+
+**Error — Not Found (404):**
+```json
+{
+  "success": false,
+  "message": "Order with ID 'ORD-INVALID' not found",
+  "statusCode": 404
+}
+```
+
+---
+
+### Error Responses
+
+**Invalid credentials (401):**
+```json
+{
+  "success": false,
+  "message": "Invalid credentials",
+  "statusCode": 401
+}
+```
+
+**Unknown ticker (400):**
+```json
+{
+  "success": false,
+  "message": "Unknown stock symbol(s): FAKECOIN. Available stocks: AAPL, TSLA, MSFT, AMZN, GOOGL, META, NVDA, NFLX",
+  "statusCode": 400
+}
+```
+
+**Portfolio weights not 100 (400):**
+```json
+{
+  "success": false,
+  "message": "Portfolio weights must sum to 100. Current sum: 90.00",
+  "statusCode": 400
+}
+```
+
+**Validation error (400):**
+```json
+{
+  "success": false,
+  "message": "totalAmount must be greater than 0",
+  "errors": ["totalAmount must be greater than 0"],
+  "statusCode": 400
+}
+```
+
+**No token (401):**
+```json
+{
+  "success": false,
+  "message": "Unauthorized: Missing or malformed Authorization header. Expected: Bearer <token>",
+  "statusCode": 401
+}
 ```

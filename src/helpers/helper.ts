@@ -4,11 +4,9 @@ import config from "../config";
 
 const AVAILABLE_STOCKS: Record<string, number> = stocksData;
 
-// ─── Market scheduling constants ─────────────────────────────────────────────
-const MARKET_OPEN_HOUR_ET   = 9;
-const MARKET_OPEN_MINUTE_ET = 30;
-const MARKET_CLOSE_HOUR_ET  = 16; // 4:00 PM ET
-const MARKET_CLOSE_MINUTE_ET = 0;
+// ─── Market scheduling ────────────────────────────────────────────────────────
+// Hours/minutes are read from config (set via .env MARKET_OPEN_HOUR etc.)
+// so trading window can be changed without touching code.
 
 /**
  * Returns the UTC offset in minutes for America/New_York at a given date.
@@ -50,35 +48,28 @@ export function isMarketOpen(): boolean {
   const utcDay        = now.getUTCDay();
   const offsetMinutes = getEasternOffsetMinutes(now);
 
-  if (utcDay === 0 || utcDay === 6) return false; // weekend
+  if (utcDay === 0 || utcDay === 6) return false;
 
-  const marketOpen  = toUtcTime(now, MARKET_OPEN_HOUR_ET,  MARKET_OPEN_MINUTE_ET,  offsetMinutes);
-  const marketClose = toUtcTime(now, MARKET_CLOSE_HOUR_ET, MARKET_CLOSE_MINUTE_ET, offsetMinutes);
-
+  const marketOpen  = toUtcTime(now, config.market.openHour,  config.market.openMinute,  offsetMinutes);
+  const marketClose = toUtcTime(now, config.market.closeHour, config.market.closeMinute, offsetMinutes);
   return now >= marketOpen && now < marketClose;
 }
 
-/**
- * Returns the ISO timestamp of the next market open (9:30 AM ET, next weekday).
- * Falls back to tomorrow 14:30 UTC if the Intl API fails — scheduling errors
- * must never cause a 500 on the split order response.
- */
 export function getNextMarketOpenDate(): string {
   try {
     const now    = new Date();
     const utcDay = now.getUTCDay();
 
     let daysToAdd = 1;
-    if (utcDay === 5) daysToAdd = 3; // Friday   → Monday
-    if (utcDay === 6) daysToAdd = 2; // Saturday → Monday
+    if (utcDay === 5) daysToAdd = 3;
+    if (utcDay === 6) daysToAdd = 2;
 
     const nextDate   = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + daysToAdd));
     const nextOffset = getEasternOffsetMinutes(nextDate);
-    const nextOpen   = toUtcTime(nextDate, MARKET_OPEN_HOUR_ET, MARKET_OPEN_MINUTE_ET, nextOffset);
+    const nextOpen   = toUtcTime(nextDate, config.market.openHour, config.market.openMinute, nextOffset);
 
     return nextOpen.toISOString();
   } catch {
-    // Intl API unavailable or unexpected failure — fall back to tomorrow 14:30 UTC
     const fallback = new Date();
     fallback.setUTCDate(fallback.getUTCDate() + 1);
     fallback.setUTCHours(14, 30, 0, 0);
@@ -91,18 +82,20 @@ export function getNextMarketOpenDate(): string {
  * Included in every split order response so partners always know trading hours.
  */
 export function getMarketInfo(): MarketInfo {
-  const now           = new Date();
-  const offsetMinutes = getEasternOffsetMinutes(now);
-  const offsetHours   = Math.abs(Math.trunc(offsetMinutes / 60));
+  const offsetMinutes = getEasternOffsetMinutes(new Date());
   const tzLabel       = offsetMinutes === -300 ? "EST (UTC-5)" : "EDT (UTC-4)";
 
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const openTime  = `${pad(config.market.openHour)}:${pad(config.market.openMinute)} ET (${tzLabel})`;
+  const closeTime = `${pad(config.market.closeHour)}:${pad(config.market.closeMinute)} ET (${tzLabel})`;
+
   return {
-    tradingDays: "Monday to Friday",
-    openTime:    `09:30 AM ET (${tzLabel})`,
-    closeTime:   `04:00 PM ET (${tzLabel})`,
-    timezone:    "America/New_York",
+    tradingDays:   "Monday to Friday",
+    openTime,
+    closeTime,
+    timezone:      "America/New_York",
     currentlyOpen: isMarketOpen(),
-    nextOpenAt:  isMarketOpen() ? null : getNextMarketOpenDate(),
+    nextOpenAt:    isMarketOpen() ? null : getNextMarketOpenDate(),
   };
 }
 

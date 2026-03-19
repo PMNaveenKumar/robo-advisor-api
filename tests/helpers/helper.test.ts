@@ -1,4 +1,5 @@
 import "reflect-metadata";
+import config from "../../src/config";
 import {
   calculateStockAmount,
   calculateShares,
@@ -288,16 +289,18 @@ describe("helper.ts", () => {
       expect(new Date(getNextMarketOpenDate()).getTime()).toBeGreaterThanOrEqual(Date.now() - 1000);
     });
 
-    it("should be a weekday (Mon–Fri)", () => {
+    it("should return a weekday (Mon=1 through Fri=5)", () => {
       const day = new Date(getNextMarketOpenDate()).getUTCDay();
       expect(day).toBeGreaterThanOrEqual(1);
       expect(day).toBeLessThanOrEqual(5);
     });
 
-    it("should schedule at 9:30 AM ET (UTC offset depends on DST)", () => {
+    it("should schedule at configured open minute from config.market.openMinute", () => {
+      // Minutes always match config (30 from MARKET_OPEN_MINUTE=30 in .env)
+      // UTC hours differ by DST: 13 (EDT summer) or 14 (EST winter) — both correct
       const d = new Date(getNextMarketOpenDate());
-      expect(d.getUTCMinutes()).toBe(30);
-      // Hours are 13 (EDT summer) or 14 (EST winter) — both valid
+      expect(d.getUTCMinutes()).toBe(config.market.openMinute);
+      expect(d.getUTCSeconds()).toBe(0);
     });
   });
 

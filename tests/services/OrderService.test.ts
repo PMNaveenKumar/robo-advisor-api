@@ -4,12 +4,22 @@ import { OrderService } from "../../src/services/OrderService";
 import { OrderRepository } from "../../src/data/OrderRepository";
 import { SplitOrderRequestSchema } from "../../src/schemas";
 import { AppError } from "../../src/errors/AppError";
-import { Order, OrderType, ModelPortfolio } from "../../src/types";
+import { Order, OrderType, ModelPortfolio, SplitOrderResponse, MarketClosedResponse } from "../../src/types";
 
 interface RequestOverrides {
   portfolio?: ModelPortfolio;
   totalAmount?: number;
   orderType?: OrderType;
+}
+
+function asSplitOrder(result: SplitOrderResponse | MarketClosedResponse): SplitOrderResponse {
+  if ("status" in result && result.status === "MARKET_CLOSED") {
+    throw new Error(
+      "Expected SplitOrderResponse but got MarketClosedResponse. " +
+      "Set DEBUG_MARKET_OPEN=true in .env to bypass market hours in tests."
+    );
+  }
+  return result as SplitOrderResponse;
 }
 
 function makeValidRequest(overrides: RequestOverrides = {}): SplitOrderRequestSchema {
@@ -42,7 +52,7 @@ describe("OrderService", () => {
   // ─── splitOrder ───────────────────────────────────────────────────────────
   describe("splitOrder", () => {
     it("should return success=true with ORD- id, orderType and totalAmount", () => {
-      const result = orderService.splitOrder(makeValidRequest());
+      const result = asSplitOrder(orderService.splitOrder(makeValidRequest()));
       expect(result.success).toBe(true);
       expect(result.data.id).toMatch(/^ORD-/);
       expect(result.data.orderType).toBe("BUY");
@@ -50,12 +60,12 @@ describe("OrderService", () => {
     });
 
     it("should NOT have responseTimeMs on the order", () => {
-      const result = orderService.splitOrder(makeValidRequest());
+      const result = asSplitOrder(orderService.splitOrder(makeValidRequest()));
       expect((result.data as unknown as Record<string, unknown>)["responseTimeMs"]).toBeUndefined();
     });
 
     it("should build legs with ticker, percentage, shares, price, amount", () => {
-      const result = orderService.splitOrder(makeValidRequest());
+      const result = asSplitOrder(orderService.splitOrder(makeValidRequest()));
       const { legs } = result.data;
       expect(legs).toHaveLength(2);
 
@@ -85,7 +95,7 @@ describe("OrderService", () => {
         },
         totalAmount: 1000,
       });
-      const result = orderService.splitOrder(req);
+      const result = asSplitOrder(orderService.splitOrder(req));
       const aapl = result.data.legs.find((l) => l.ticker === "AAPL")!;
 
       expect(aapl.shares).toBe(3.166);
@@ -101,25 +111,21 @@ describe("OrderService", () => {
         },
         totalAmount: 100,
       });
-      const result = orderService.splitOrder(req);
+      const result = asSplitOrder(orderService.splitOrder(req));
       expect(result.data.legs[0].price).toBe(200);
       expect(result.data.legs[0].shares).toBe(0.5);
       expect(result.data.legs[0].amount).toBe(100); // 0.5 × $200 = exact
     });
 
     it("should handle SELL order type", () => {
-      expect(orderService.splitOrder(makeValidRequest({ orderType: "SELL" })).data.orderType).toBe("SELL");
+      expect(asSplitOrder(orderService.splitOrder(makeValidRequest({ orderType: "SELL" }))).data.orderType).toBe("SELL");
     });
 
-    it("should set executeAt to future weekday at 14:30 UTC", () => {
-      const result = orderService.splitOrder(makeValidRequest());
-      const d = new Date(result.data.executeAt);
-      const day = d.getUTCDay();
-      expect(d.getTime()).toBeGreaterThan(Date.now());
-      expect(day).toBeGreaterThanOrEqual(1);
-      expect(day).toBeLessThanOrEqual(5);
-      expect(d.getUTCHours()).toBe(14);
-      expect(d.getUTCMinutes()).toBe(30);
+    it("should set executeAt to now or a future time when market is open", () => {
+      const before = Date.now();
+      const result = asSplitOrder(orderService.splitOrder(makeValidRequest()));
+      const executeAt = new Date(result.data.executeAt).getTime();
+      expect(executeAt).toBeGreaterThanOrEqual(before - 100);
     });
 
     it("should persist the order in the repository", () => {
@@ -194,7 +200,7 @@ describe("OrderService", () => {
   // ─── getOrderById ─────────────────────────────────────────────────────────
   describe("getOrderById", () => {
     it("should return the order by ID", () => {
-      const created: Order = orderService.splitOrder(makeValidRequest()).data;
+      const created: Order = asSplitOrder(orderService.splitOrder(makeValidRequest())).data;
       const found: Order = orderService.getOrderById(created.id);
       expect(found.id).toBe(created.id);
     });
