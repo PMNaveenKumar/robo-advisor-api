@@ -4,6 +4,7 @@ import Container from "typedi";
 import { createApp } from "../../src/app";
 import { OrderRepository } from "../../src/data/OrderRepository";
 import { Application } from "express";
+import * as helper from "../../src/helpers/helper";
 
 let app: Application;
 let authToken: string;
@@ -30,6 +31,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   Container.get(OrderRepository).clear();
+  jest.spyOn(helper, "isMarketOpen").mockReturnValue(true);
 });
 
 // ─── GET /health ──────────────────────────────────────────────────────────────

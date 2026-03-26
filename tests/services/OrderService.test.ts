@@ -5,6 +5,7 @@ import { OrderRepository } from "../../src/data/OrderRepository";
 import { SplitOrderRequestSchema } from "../../src/schemas";
 import { AppError } from "../../src/errors/AppError";
 import { Order, OrderType, ModelPortfolio, SplitOrderResponse, MarketClosedResponse } from "../../src/types";
+import * as helper from "../../src/helpers/helper";
 
 interface RequestOverrides {
   portfolio?: ModelPortfolio;
@@ -45,6 +46,7 @@ describe("OrderService", () => {
     orderRepository = new OrderRepository();
     Container.set(OrderRepository, orderRepository);
     orderService = new OrderService(orderRepository);
+    jest.spyOn(helper, "isMarketOpen").mockReturnValue(true);
   });
 
   afterEach(() => orderRepository.clear());
