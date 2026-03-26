@@ -13,7 +13,7 @@ import { Container } from "typedi";
 import config from "./config";
 import { AuthController } from "./controllers/AuthController";
 import { OrderController } from "./controllers/OrderController";
-import { authorizationChecker, currentUserChecker } from "./middleware/authMiddleware";
+import { authorizationChecker } from "./middleware/authMiddleware";
 import { loggerMiddleware, logger } from "./middleware/loggerMiddleware";
 import { globalErrorHandler } from "./middleware/errorMiddleware";
 import { requestIdMiddleware, httpsEnforcer } from "./middleware/securityMiddleware";
@@ -102,8 +102,7 @@ export function createApp(): Application {
     validation: { whitelist: true, forbidNonWhitelisted: false },
     classTransformer: true,
     defaultErrorHandler: false, // our globalErrorHandler handles all errors including AppError
-    authorizationChecker,
-    currentUserChecker,
+    authorizationChecker
   });
 
   // ─── 9. 404 catch-all ─────────────────────────────────────────────────────

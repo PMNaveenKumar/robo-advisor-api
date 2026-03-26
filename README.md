@@ -39,7 +39,7 @@ src/
 ├── errors/AppError.ts              Custom error class with statusCode
 ├── helpers/helper.ts               Pure calculation functions
 ├── middleware/
-│   ├── authMiddleware.ts           authorizationChecker + currentUserChecker
+│   ├── authMiddleware.ts           authorizationChecker
 │   ├── errorMiddleware.ts          globalErrorHandler (all errors incl. 404)
 │   ├── loggerMiddleware.ts         HTTP request logger using Logger class
 │   └── securityMiddleware.ts       loginRateLimiter, requestIdMiddleware, httpsEnforcer
@@ -274,8 +274,7 @@ curl -X POST http://localhost:3000/api/orders/split \
     "openTime": "09:30 ET (EDT UTC-4)",
     "closeTime": "16:00 ET (EDT UTC-4)",
     "timezone": "America/New_York",
-    "currentlyOpen": true,
-    "nextOpenAt": null
+    "currentlyOpen": true
   }
 }
 ```
@@ -308,19 +307,18 @@ curl -X POST http://localhost:3000/api/orders/split \
 {
   "success": true,
   "status": "MARKET_CLOSED",
-  "message": "Market is currently closed. Next open: 2024-03-18T13:30:00.000Z",
+  "message": "Market is currently closed.",
   "market": {
     "tradingDays": "Monday to Friday",
     "openTime": "09:30 ET (EDT UTC-4)",
     "closeTime": "16:00 ET (EDT UTC-4)",
     "timezone": "America/New_York",
-    "currentlyOpen": false,
-    "nextOpenAt": "2024-03-18T13:30:00.000Z"
+    "currentlyOpen": false
   }
 }
 ```
 
-> **Note:** No order is created when the market is closed. Re-submit the request after `nextOpenAt`.
+> **Note:** No order is created when the market is closed.
 
 ---
 
@@ -363,8 +361,7 @@ curl -X POST http://localhost:3000/api/orders/split \
     "openTime": "09:30 ET (EDT UTC-4)",
     "closeTime": "16:00 ET (EDT UTC-4)",
     "timezone": "America/New_York",
-    "currentlyOpen": true,
-    "nextOpenAt": null
+    "currentlyOpen": true
   }
 }
 ```

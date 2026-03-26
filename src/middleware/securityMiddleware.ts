@@ -22,11 +22,6 @@ export const loginRateLimiter = rateLimit({
   max: config.rateLimit.maxRequests,
   standardHeaders: true,  // returns RateLimit-* headers in response
   legacyHeaders: false,
-  message: {
-    success: false,
-    message: "Too many login attempts. Please try again later.",
-    statusCode: 429,
-  },
   handler: (req: Request, res: Response) => {
     logger.warn(
       `Rate limit exceeded for login — IP: ${req.ip}`

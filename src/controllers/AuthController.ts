@@ -12,13 +12,6 @@ import { LoginRequestSchema } from "../schemas";
 import { LoginResponse } from "../types";
 import { loginRateLimiter } from "../middleware/securityMiddleware";
 
-/**
- * AuthController
- * HTTP layer only — delegates to AuthService, AppError bubbles to globalErrorHandler.
- *
- * @UseBefore(loginRateLimiter) applies rate limiting specifically to POST /login.
- * No other endpoint is rate limited by this controller.
- */
 @Service()
 @JsonController("/auth")
 export class AuthController {

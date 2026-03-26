@@ -48,8 +48,6 @@ Dependency injection via `typedi` meant each class receives its dependencies thr
 
 **Swagger $ref resolution errors.** `routing-controllers-openapi` generates `$ref` pointers like `#/components/schemas/LoginRequestSchema` but does not populate the `components.schemas` section automatically. Swagger UI showed resolver errors because the referenced schemas did not exist in the spec. The fix was to manually define all request body schemas as JSON Schema objects under `components.schemas` in `buildSwaggerSpec()`.
 
-**Floating-point arithmetic in share calculations.** Dividing dollar amounts by share prices produces numbers like `0.13333333...`. Without explicit rounding, responses contained inconsistent precision. The fix was `roundToDecimalPlaces()` using `Math.round(value * factor) / factor` with the decimal places read from config, applied consistently in every calculation.
-
 ---
 
 ## 4. What changes and controls would you put in place for production?

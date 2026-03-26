@@ -43,7 +43,6 @@ export interface SplitOrderResponse {
     closeTime:     string;
     timezone:      string;
     currentlyOpen: boolean;
-    nextOpenAt:    string | null;
   };
 }
 
@@ -57,7 +56,6 @@ export interface MarketClosedResponse {
     closeTime:     string;
     timezone:      string;
     currentlyOpen: false;
-    nextOpenAt:    string;
   };
 }
 

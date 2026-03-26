@@ -28,14 +28,13 @@ export class OrderService {
         const response: MarketClosedResponse = {
           success:  true,
           status:   "MARKET_CLOSED",
-          message:  `Market is currently closed. Next open: ${marketInfo.nextOpenAt}`,
+          message:  `Market is currently closed.`,
           market: {
             tradingDays:   marketInfo.tradingDays,
             openTime:      marketInfo.openTime,
             closeTime:     marketInfo.closeTime,
             timezone:      marketInfo.timezone,
-            currentlyOpen: false,
-            nextOpenAt:    marketInfo.nextOpenAt as string,
+            currentlyOpen: false
           },
         };
         return response;
@@ -74,8 +73,7 @@ export class OrderService {
           openTime:      marketInfo.openTime,
           closeTime:     marketInfo.closeTime,
           timezone:      marketInfo.timezone,
-          currentlyOpen: true,
-          nextOpenAt:    null,
+          currentlyOpen: true
         },
       };
     } catch (err: unknown) {

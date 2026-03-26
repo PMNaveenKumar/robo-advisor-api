@@ -55,28 +55,6 @@ export function isMarketOpen(): boolean {
   return now >= marketOpen && now < marketClose;
 }
 
-export function getNextMarketOpenDate(): string {
-  try {
-    const now    = new Date();
-    const utcDay = now.getUTCDay();
-
-    let daysToAdd = 1;
-    if (utcDay === 5) daysToAdd = 3;
-    if (utcDay === 6) daysToAdd = 2;
-
-    const nextDate   = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + daysToAdd));
-    const nextOffset = getEasternOffsetMinutes(nextDate);
-    const nextOpen   = toUtcTime(nextDate, config.market.openHour, config.market.openMinute, nextOffset);
-
-    return nextOpen.toISOString();
-  } catch {
-    const fallback = new Date();
-    fallback.setUTCDate(fallback.getUTCDate() + 1);
-    fallback.setUTCHours(14, 30, 0, 0);
-    return fallback.toISOString();
-  }
-}
-
 /**
  * Returns human-readable market schedule information.
  * Included in every split order response so partners always know trading hours.
@@ -94,8 +72,7 @@ export function getMarketInfo(): MarketInfo {
     openTime,
     closeTime,
     timezone:      "America/New_York",
-    currentlyOpen: isMarketOpen(),
-    nextOpenAt:    isMarketOpen() ? null : getNextMarketOpenDate(),
+    currentlyOpen: isMarketOpen()
   };
 }
 
@@ -105,7 +82,6 @@ export interface MarketInfo {
   closeTime:     string;
   timezone:      string;
   currentlyOpen: boolean;
-  nextOpenAt:    string | null;  // null when market is currently open
 }
 
 export function getAvailableStocks(): Record<string, number> {
@@ -151,14 +127,9 @@ export function calculateActualAmount(shares: number, stock: StockHolding): numb
   return truncateToDecimalPlaces(shares * price, config.business.amountDecimalPlaces);
 }
 
-export function roundToDecimalPlaces(value: number, places: number): number {
-  const factor = Math.pow(10, places);
-  return Math.round(value * factor) / factor;
-}
-
 export function validatePortfolioWeights(stocks: StockHolding[]): { valid: boolean; total: number } {
   const total = stocks.reduce((sum, s) => sum + s.percentage, 0);
-  return { valid: Math.abs(total - 100) < 0.001, total };
+  return { valid: total === 100, total };
 }
 
 export function buildOrderLegs(stocks: StockHolding[], totalAmount: number): OrderLeg[] {

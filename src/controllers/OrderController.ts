@@ -5,8 +5,7 @@ import {
   Body,
   Param,
   HttpCode,
-  Authorized,
-  CurrentUser,
+  Authorized
 } from "routing-controllers";
 import { Inject, Service } from "typedi";
 import { OpenAPI } from "routing-controllers-openapi";
@@ -14,7 +13,6 @@ import { OrderService } from "../services/OrderService";
 import { SplitOrderRequestSchema } from "../schemas";
 import {
   HistoricOrdersResponse,
-  JwtPayload,
   MarketClosedResponse,
   SplitOrderResponse,
   Order,
@@ -52,10 +50,8 @@ export class OrderController {
     },
   })
   splitOrder(
-    @Body({ validate: true }) body: SplitOrderRequestSchema,
-    @CurrentUser() _user: JwtPayload
+    @Body({ validate: true }) body: SplitOrderRequestSchema
   ): SplitOrderResponse | MarketClosedResponse {
-    // AppError thrown by OrderService bubbles up to globalErrorHandler automatically
     return this.orderService.splitOrder(body);
   }
 
@@ -70,7 +66,7 @@ export class OrderController {
       "401": { description: "Unauthorized" },
     },
   })
-  getHistoricOrders(@CurrentUser() _user: JwtPayload): HistoricOrdersResponse {
+  getHistoricOrders(): HistoricOrdersResponse {
     return this.orderService.getHistoricOrders();
   }
 
@@ -87,8 +83,7 @@ export class OrderController {
     },
   })
   getOrderById(
-    @Param("id") id: string,
-    @CurrentUser() _user: JwtPayload
+    @Param("id") id: string
   ): { success: boolean; data: Order } {
     return { success: true, data: this.orderService.getOrderById(id) };
   }

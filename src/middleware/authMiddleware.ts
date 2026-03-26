@@ -39,11 +39,3 @@ export async function authorizationChecker(action: Action): Promise<boolean> {
     return false;
   }
 }
-
-/**
- * currentUserChecker
- * Returns the decoded JWT payload attached by authorizationChecker.
- */
-export function currentUserChecker(action: Action): JwtPayload | undefined {
-  return action.request.user as JwtPayload | undefined;
-}

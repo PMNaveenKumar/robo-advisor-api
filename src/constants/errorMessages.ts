@@ -23,8 +23,7 @@ export const ERROR_MESSAGES = {
 
   // ─── Validation ────────────────────────────────────────────────────────
   VALIDATION: {
-    FAILED: "Validation failed",
-    BODY_REQUIRED: "Request body is required",
+    FAILED: "Validation failed"
   },
 
   // ─── Generic ───────────────────────────────────────────────────────────

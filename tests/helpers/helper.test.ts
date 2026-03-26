@@ -5,12 +5,10 @@ import {
   calculateShares,
   calculateActualAmount,
   truncateToDecimalPlaces,
-  roundToDecimalPlaces,
   validatePortfolioWeights,
   validateStockSymbols,
   resolveStockPrice,
   buildOrderLegs,
-  getNextMarketOpenDate,
   generateOrderId,
   getAvailableStocks,
 } from "../../src/helpers/helper";
@@ -275,32 +273,6 @@ describe("helper.ts", () => {
 
     it("should uppercase tickers", () => {
       expect(buildOrderLegs([{ ticker: "msft", percentage: 100 }], 100)[0].ticker).toBe("MSFT");
-    });
-  });
-
-  // ─── getNextMarketOpenDate ────────────────────────────────────────────────
-  describe("getNextMarketOpenDate", () => {
-    it("should return a valid ISO date string", () => {
-      const result = getNextMarketOpenDate();
-      expect(new Date(result).toISOString()).toBe(result);
-    });
-
-    it("should return today or a future date (same-day if before market open)", () => {
-      expect(new Date(getNextMarketOpenDate()).getTime()).toBeGreaterThanOrEqual(Date.now() - 1000);
-    });
-
-    it("should return a weekday (Mon=1 through Fri=5)", () => {
-      const day = new Date(getNextMarketOpenDate()).getUTCDay();
-      expect(day).toBeGreaterThanOrEqual(1);
-      expect(day).toBeLessThanOrEqual(5);
-    });
-
-    it("should schedule at configured open minute from config.market.openMinute", () => {
-      // Minutes always match config (30 from MARKET_OPEN_MINUTE=30 in .env)
-      // UTC hours differ by DST: 13 (EDT summer) or 14 (EST winter) — both correct
-      const d = new Date(getNextMarketOpenDate());
-      expect(d.getUTCMinutes()).toBe(config.market.openMinute);
-      expect(d.getUTCSeconds()).toBe(0);
     });
   });
 
